@@ -1,0 +1,711 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+  html_notebook: default
+  pdf_document: default
+---
+
+```{r}
+library(ggplot2)
+library(gridExtra)
+library(reshape2)
+library(plotly)
+library(dplyr)
+library(gplots)
+library(lubridate)
+library(tidyverse)
+library(caret)
+library(tidyr)
+library(modelr)
+library(glmnet)
+library(recipes)
+library(randomForest)
+library(FactoMineR)
+library(factoextra)
+library(Metrics)
+```
+
+```{r}
+df_j <- read.csv("D:/FALL 23/CSP 571/Project/2020-Jan.csv")
+df_j <- replace(df_j, df_j=='', NA)
+#print(df_j)
+head(df_j)
+newdf_j <- na.omit(df_j)
+```
+
+#---------------------------------------------------------------------------------------------------------------------
+# Summary Statistics:
+#---------------------------------------------------------------------------------------------------------------------
+
+```{r}
+price_col <- newdf_j$price
+
+# Mean
+mu_of_price <- mean(price_col)
+
+# Median
+median_of_price <- median(price_col)
+
+# Mode (using a custom function)
+mode_of_price <- function(x) {
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x, ux)))]
+}
+mode_price_value <- mode_of_price(price_col)
+
+# Range
+range_price <- max(price_col) - min(price_col)
+
+# Standard Deviation
+stddev_of_price <- sd(price_col)
+
+cat("Mean:", mu_of_price, "\n")
+cat("Median:", median_of_price, "\n")
+cat("Mode:", mode_price_value, "\n")
+cat("Range:", range_price, "\n")
+cat("Standard Deviation:", stddev_of_price, "\n")
+```
+
+#---------------------------------------------------------------------------------------------------------------------
+# Univariate Analysis:
+#---------------------------------------------------------------------------------------------------------------------
+
+```{r}
+colnames(newdf_j)
+
+# Bar plot for 'event_type'
+ggplot(newdf_j, aes(x = event_type)) +
+  geom_bar(fill = "lightcoral", color = "black") +
+  labs(title = "Bar Plot of Event Type", x = "Event Type", y = "Count")
+
+# Bar plot for 'category_code'
+ggplot(newdf_j, aes(x = category_code)) +
+  geom_bar(fill = "lightcoral", color = "black") +
+  labs(title = "Bar Plot of Category Code", x = "Category Code", y = "Count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Bar plot for 'brand'
+ggplot(newdf_j, aes(x = brand)) +
+  geom_bar(fill = "lightskyblue", color = "black") +
+  labs(title = "Bar Plot of Brand", x = "Brand", y = "Count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Histogram for 'price'
+ggplot(newdf_j, aes(x = price)) +
+  geom_histogram(binwidth = 5, fill = "lightcoral", color = "black") +
+  labs(title = "Histogram of Price", x = "Price", y = "Frequency")
+
+```
+
+#---------------------------------------------------------------------------------------------------------------------
+# Bivariate Analysis
+#---------------------------------------------------------------------------------------------------------------------
+
+```{r}
+ggplot(newdf_j, aes(x = brand, y = price)) +
+  geom_point() +
+  labs(title = "Scatter Plot of Price vs. Brand", x = "Brand", y = "Price") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+cor(newdf_j$price, newdf_j$category_id)
+cor(newdf_j[, c("price", "category_id")])
+
+ggplot(newdf_j, aes(x = event_type, y = price)) +
+  geom_boxplot(fill = "skyblue") +
+  labs(title = "Box Plot of Price by Event Type", x = "Event Type", y = "Price")
+
+ggplot(newdf_j, aes(x = brand, y = price)) +
+  geom_boxplot(fill = "lightcoral") +
+  labs(title = "Box Plot of Price by Brand", x = "Brand", y = "Price") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+cor(newdf_j$price, newdf_j$category_id)
+
+numericvar <- newdf_j[, c("price", "category_id")]
+
+cor_matrix <- cor(numericvar)
+print(cor_matrix)
+
+# Select numeric variables for the heatmap
+numericvar <- newdf_j[, c("price", "category_id")]
+
+# Calculate the correlation matrix
+cor_matrix <- cor(numericvar)
+```
+
+#---------------------------------------------------------------------------------------------------------------------
+# Outlier Detection:
+#---------------------------------------------------------------------------------------------------------------------
+
+```{r}
+# Scatter plot for Price vs. Event Type
+ggplot(newdf_j, aes(x = event_type, y = price)) +
+  geom_point() +
+  labs(title = "Scatter Plot of Price vs. Event Type", x = "Event Type", y = "Price")
+
+# Calculate IQR for Price
+price_iqr <- IQR(newdf_j$price)
+
+# Set a threshold for outliers
+outlier_threshold <- 1.5 * price_iqr
+
+# Identify outliers
+outliers <- newdf_j[newdf_j$price > quantile(newdf_j$price)[4] + outlier_threshold |
+                      newdf_j$price < quantile(newdf_j$price)[2] - outlier_threshold, ]
+
+# Display the outliers
+print(outliers)
+```
+
+#---------------------------------------------------------------------------------------------------------------------
+# Visualization:
+#---------------------------------------------------------------------------------------------------------------------
+
+```{r}
+# Bar chart for Event Types
+ggplot(newdf_j, aes(x = event_type)) +
+  geom_bar(fill = "lightcoral") +
+  labs(title = "Bar Chart of Event Types", x = "Event Type", y = "Count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Pie chart for Event Types
+event_type_counts <- table(newdf_j$event_type)
+plot_ly(labels = names(event_type_counts), values = event_type_counts, type = "pie", hole = 0.6) %>%
+  layout(title = "Pie Chart of Event Types")
+
+# Bar chart for Categories
+ggplot(newdf_j, aes(x = category_code)) +
+  geom_bar(fill = "skyblue") +
+  labs(title = "Bar Chart of Categories", x = "Category Code", y = "Count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Box plot for Prices by Event Type
+ggplot(newdf_j, aes(x = event_type, y = price)) +
+  geom_boxplot(fill = "lightgreen") +
+  labs(title = "Box Plot of Prices by Event Type", x = "Event Type", y = "Price")
+```
+
+#---------------------------------------------------------------------------------------------------------------------
+# Time Series Analysis, Clustering and Association Rules
+#---------------------------------------------------------------------------------------------------------------------
+
+```{r}
+# Convert event_time to POSIXct
+newdf_j$event_time <- as.POSIXct(newdf_j$event_time)
+
+# Aggregate events by day
+daily_events <- aggregate(event_type ~ as.Date(event_time), data = newdf_j, FUN = length)
+
+# Plot time series
+ggplot(daily_events, aes(x = `as.Date(event_time)`, y = event_type)) +
+  geom_line() +
+  labs(title = "Time Series Plot of Daily Event Counts", x = "Date", y = "Event Count")
+
+# K-Means clustering on numeric variables
+numericvar <- newdf_j[, c("price")]
+
+# Standardize numeric variables
+scaled_vars <- scale(numericvar)
+
+# Determine optimal number of clusters using the elbow method
+wss <- numeric(10)
+for (i in 1:10) wss[i] <- sum(kmeans(scaled_vars, centers = i)$withinss)
+
+# Plot the elbow method
+plot(1:10, wss, type = "b", xlab = "Number of Clusters",
+     ylab = "Within-cluster Sum of Squares")
+
+# Choose an appropriate number of clusters and perform k-means clustering
+num_clusters <- 3 
+clusters <- kmeans(scaled_vars, centers = num_clusters)
+
+# Visualize clustering results
+ggplot(newdf_j, aes(x = price, fill = as.factor(clusters$cluster))) +
+  geom_density(alpha = 0.5) +
+  labs(title = "K-Means Clustering of Prices", x = "Price", fill = "Cluster")
+```
+
+#---------------------------------------------------------------------------------------------------------------------
+# Frequency Tables for Categorical Variables:
+#---------------------------------------------------------------------------------------------------------------------
+
+```{r}
+# Frequency table for Event Type
+event_type_freq <- table(newdf_j$event_type)
+print(event_type_freq)
+# Frequency table for Category Code
+category_code_freq <- table(newdf_j$category_code)
+print(category_code_freq)
+# Summary statistics for Price
+summary(newdf_j$price)
+# CDF for Price
+price_sorted <- sort(newdf_j$price)
+cdf <- ecdf(price_sorted)
+plot(cdf, main = "Cumulative Distribution Function (CDF) for Price", xlab = "Price", ylab = "Cumulative Probability")
+```
+
+#---------------------------------------------------------------------------------------------------------------------
+# User and Product Analysis:
+#---------------------------------------------------------------------------------------------------------------------
+
+```{r}
+# Analyze the number of unique users and products
+unique_users <- length(unique(newdf_j$user_id))
+unique_products <- length(unique(newdf_j$product_id))
+
+cat("Number of Unique Users: ", unique_users, "\n")
+cat("Number of Unique Products: ", unique_products, "\n")
+
+# Explore the distribution of product prices
+ggplot(newdf_j, aes(x = price)) +
+  geom_histogram(bins = 50, fill = "skyblue", color = "black", alpha = 0.7) +
+  labs(title = "Distribution of Product Prices", x = "Price", y = "Frequency")
+
+# Investigate the distribution of events over time
+newdf_j$event_time <- as.POSIXct(newdf_j$event_time, format="%Y-%m-%d %H:%M:%S UTC")
+newdf_j$date <- as.Date(newdf_j$event_time)
+event_distribution <- table(newdf_j$event_type)
+barplot(event_distribution, main = "Distribution of Events Over Time", 
+        xlab = "Event Type", ylab = "Count", col = "skyblue", border = "black", 
+        ylim = c(0, max(event_distribution) + 50000))
+```
+
+#---------------------------------------------------------------------------------------------------------------------
+# Category and Brand Analysis:
+#---------------------------------------------------------------------------------------------------------------------
+
+```{r}
+category_distribution <- head(table(newdf_j$category_code), 20)
+ggplot(data = data.frame(category = names(category_distribution), count = as.numeric(category_distribution)), 
+       aes(x = count, y = reorder(category, -count))) +
+  geom_bar(stat = "identity", fill = "blue", color = "black") +
+  labs(title = "Top 20 Product Categories", x = "Count", y = "Category Code") +
+  theme_minimal()
+
+# Examine the distribution of products across different brands
+brand_distribution <- head(table(newdf_j$brand), 20)
+ggplot(data = data.frame(brand = names(brand_distribution), count = as.numeric(brand_distribution)), 
+       aes(x = count, y = reorder(brand, -count))) +
+  geom_bar(stat = "identity", fill = "yellow", color = "black") +
+  labs(title = "Top 20 Brands", x = "Count", y = "Brand") +
+  theme_minimal()
+
+# Explore the most popular categories and brands in terms of user interactions
+popular_categories <- newdf_j %>%group_by(category_code) %>%summarise(event_count = n()) %>%arrange(desc(event_count)) %>%
+  top_n(10)
+ggplot(popular_categories, aes(x = event_count, y = reorder(category_code, -event_count))) +
+  geom_bar(stat = "identity", fill = "red", color = "black") +
+  labs(title = "Top 10 Categories in Terms of User Interactions", x = "Count", y = "Category Code") +
+  theme_minimal()
+
+popular_brands <- newdf_j %>%
+  group_by(brand) %>%
+  summarise(event_count = n()) %>%
+  arrange(desc(event_count)) %>%
+  top_n(10)
+
+ggplot(popular_brands, aes(x = event_count, y = reorder(brand, -event_count))) +
+  geom_bar(stat = "identity", fill = "green", color = "black") +
+  labs(title = "Top 10 Brands in Terms of User Interactions", x = "Count", y = "Brand") +
+  theme_minimal()
+```
+
+#---------------------------------------------------------------------------------------------------------------------
+# Brand Analysis:
+#---------------------------------------------------------------------------------------------------------------------
+
+```{r}
+# Investigate the popularity of different brands
+top_brands <- head(table(newdf_j$brand), 10)
+print("Top 10 Brands by Popularity:")
+print(top_brands)
+
+# Explore the market share of brands in different product categories
+category_brand_counts <- table(newdf_j$category_code, newdf_j$brand)
+category_brand_market_share <- prop.table(category_brand_counts, margin = 1)
+
+# Plotting market share of top brands in each category with numerical values
+heatmap.2(category_brand_market_share, 
+          col = colorRampPalette(c("yellow", "lightblue", "darkblue"))(20), 
+          trace = "none", 
+          margins = c(5, 10), 
+          main = 'Market Share of Top Brands in Different Categories',
+          xlab = 'Product Categories',
+          ylab = 'Brands',
+          cellnote = category_brand_counts, 
+          notecol = "black",  
+          notecex = 0.8,
+          key = TRUE, 
+          key.title = "Market Share",
+          key.xlab = "Percentage"
+)
+```
+
+#---------------------------------------------------------------------------------------------------------------------
+# Feature Engineering:
+#---------------------------------------------------------------------------------------------------------------------
+
+```{r}
+newdf_j$event_time <- as.POSIXct(newdf_j$event_time, format = "%Y-%m-%d %H:%M:%S", tz = "UTC")
+newdf_j$day <- day(newdf_j$event_time)
+newdf_j$month <- month(newdf_j$event_time)
+newdf_j$hour <- hour(newdf_j$event_time)
+newdf_j$minute <- minute(newdf_j$event_time)
+
+newdf_j <- newdf_j %>%
+  mutate(event_time = as.POSIXct(event_time, format = "%Y-%m-%d %H:%M:%S", tz = "UTC"),
+         user_session_duration = difftime(max(event_time), min(event_time), units = "secs"))
+
+cpynewdf_j <- newdf_j  
+
+# Define columns to one-hot encode and apply one-hot encoding
+encodecol <- c('event_type', 'category_code', 'brand')
+cpynewdf_j <- cbind(cpynewdf_j, model.matrix(~. - 1, data = cpynewdf_j[, encodecol]))
+colnames(cpynewdf_j) <- c(colnames(cpynewdf_j[, -which(colnames(cpynewdf_j) %in% encodecol)]),
+                          paste0('event_', levels(cpynewdf_j$event_type)),
+                          paste0('category_', levels(cpynewdf_j$category_code)),
+                          paste0('brand_', levels(cpynewdf_j$brand)))
+
+cpynewdf_j <- cpynewdf_j[, -which(colnames(cpynewdf_j) %in% encodecol)]
+print(cpynewdf_j)
+cpynewdf_j <- newdf_j
+
+product_popularity <- cpynewdf_j %>%
+  group_by(product_id, event_type) %>%
+  summarize(count = n()) %>%
+  pivot_wider(names_from = event_type, values_from = count, values_fill = 0)
+
+print(product_popularity)
+
+user_statistic <- newdf_j %>%
+  group_by(user_id) %>%
+  summarize(mu_of_price = mean(price), std_price = sd(price))
+
+print(user_statistic)
+
+category_stats <- newdf_j %>%
+  group_by(category_code) %>%
+  summarize(mu_of_price = mean(price))
+
+print(category_stats)
+colnames(newdf_j)
+```
+
+#---------------------------------------------------------------------------------------------------------------------
+#Baseline Model Development 
+#---------------------------------------------------------------------------------------------------------------------
+
+```{r}
+features <- c('event_type', 'category_code', 'brand', 'user_id')
+target <- 'price'
+df <- newdf_j[, c(features, target)]
+
+set.seed(42)
+splitIndex <- createDataPartition(df$price, p = 0.8, list = FALSE)
+trainingdata <- df[splitIndex, ]
+testingdata <- df[-splitIndex, ]
+
+# Preprocess categorical features using one-hot encoding
+trainingdata <- trainingdata %>%
+  mutate(across(c('event_type', 'category_code', 'brand'), as.factor)) %>%
+  select(-user_id)  # Removing user_id for simplicity
+
+testingdata <- testingdata %>%
+  mutate(across(c('event_type', 'category_code', 'brand'), as.factor)) %>%
+  select(-user_id)
+  
+traininglevel <- levels(trainingdata$brand)
+testinglevel <- levels(testingdata$brand)
+latest_level <- setdiff(testinglevel, traininglevel)
+print(latest_level)
+combined_levels <- union(traininglevel, testinglevel)
+
+removerow <- which(testingdata$brand %in% latest_level)
+testingdata <- testingdata[-removerow, ]
+
+#fit the linear regression RFE
+baselinemod <- lm(price ~ ., data = trainingdata)
+
+# Make predictions on the cleaned test set
+prediction_baseline <- predict(baselinemod, newdata = testingdata)
+
+# MSE and R2
+MSE_baselinemod <- mean((testingdata$price - prediction_baseline)^2)
+r2_baselinemod <- 1 - (sum((testingdata$price - prediction_baseline)^2) / sum((testingdata$price - mean(testingdata$price))^2))
+
+cat(paste("Linear Regression Mean Squared Error: ", MSE_baselinemod, "\n"))
+cat(paste("Linear Regression R-squared: ", r2_baselinemod, "\n"))
+
+
+```
+
+#---------------------------------------------------------------------------------------------------------------------
+#Feature Selection and Preprocessing:
+#---------------------------------------------------------------------------------------------------------------------
+
+```{r}
+newdf_j$category_code <- as.factor(newdf_j$category_code)
+newdf_j$brand <- as.factor(newdf_j$brand)
+newdf_j$price <- as.numeric(newdf_j$price)
+
+# Check if 'price_category' exists in the dataset
+if ('price_category' %in% colnames(newdf_j)) {
+  newdf_j$price_category <- as.factor(newdf_j$price_category)
+}
+
+# Extract relevant columns
+price <- newdf_j$price
+newdf_j$event_type_numeric <- as.numeric(as.factor(newdf_j$event_type))
+
+# Drop rows with missing values
+price_event_type_data <- na.omit(newdf_j[c('price', 'event_type_numeric')])
+print(colnames(newdf_j))
+
+features <- c('product_id', 'category_code', 'brand', 'day', 'month', 'hour', 'minute',  'event_type_numeric')
+target <- 'price'
+
+selected_data <- newdf_j[, c(features, target), drop = FALSE]
+print(str(selected_data))
+set.seed(42)
+splitIndex <- createDataPartition(selected_data$price, p = 0.8, list = FALSE)
+trainingdata <- selected_data[splitIndex, ]
+testingdata <- selected_data[-splitIndex, ]
+
+rec <- recipe(price ~ ., data = trainingdata) %>%
+  step_dummy(all_nominal(), one_hot = TRUE) %>%
+  prep()
+
+X_train <- bake(rec, new_data = trainingdata)
+X_test <- bake(rec, new_data = testingdata)
+y_train <- trainingdata[, target]
+y_test <- testingdata[, target]
+```
+
+#---------------------------------------------------------------------------------------------------------------------
+#Recursive Feature Elimination (RFE):
+#---------------------------------------------------------------------------------------------------------------------
+
+```{r}
+RFE <- lm(price ~ ., data = trainingdata)
+
+bestr2value <- -Inf
+featureselected <- NULL
+
+for (i in 1:length(features)) {
+
+  formula <- as.formula(paste("price ~", paste(features[1:i], collapse = "+")))
+  
+  trainctrl <- trainControl(method = "cv", number = 5)
+  
+  cv_results <- train(formula, data = trainingdata, method = "lm", trControl = trainctrl)
+  current_r2 <- 1 - cv_results$results$Rsquared[1]
+  
+  if (current_r2 > bestr2value) {
+    bestr2value <- current_r2
+    featureselected <- features[1:i]
+  }
+}
+cat("Selected Features:", featureselected, "\n")
+cat("Best R-squared:", bestr2value, "\n")
+```
+
+#---------------------------------------------------------------------------------------------------------------------
+#Chi-square Test for Independence:
+#---------------------------------------------------------------------------------------------------------------------
+
+```{r}
+# Perform the Chi-Square Test
+# Ensure that 'event_type' and 'category_code' are factors
+newdf_j$event_type <- as.factor(newdf_j$event_type)
+newdf_j$category_code <- as.factor(newdf_j$category_code)
+contingencytable <- table(newdf_j$event_type, newdf_j$category_code)
+chi2result <- chisq.test(contingencytable)
+print(chi2result)
+```
+#--------------------------------------------------------------------------------------------------------------------
+#One-way ANOVA:
+#---------------------------------------------------------------------------------------------------------------------
+```{r}
+newdf_j$price <- as.numeric(newdf_j$price)
+# Perform One-way ANOVA
+anova_result <- aov(price ~ event_type, data = newdf_j)
+print(anova_result)
+```
+
+#---------------------------------------------------------------------------------------------------------------------
+#Independent Samples t-test:
+#---------------------------------------------------------------------------------------------------------------------
+
+```{r}
+# Perform Independent Samples t-test
+newdf_j$price <- as.numeric(newdf_j$price)
+# Choose two specific levels for the t-test
+yesgrp <- newdf_j[newdf_j$event_type == 'purchase', 'price']
+nogrp <- newdf_j[newdf_j$event_type == 'view', 'price']
+ttestanswer <- t.test(yesgrp, nogrp)
+print(ttestanswer)
+```
+
+#---------------------------------------------------------------------------------------------------------------------
+# Random Forest for prediction
+#---------------------------------------------------------------------------------------------------------------------
+
+```{r}
+# Train the random forest RFE
+RFmodel <- randomForest(price ~ ., data = trainingdata, ntree = 10)
+print(colnames(trainingdata))
+print(colnames(X_test))
+
+# Add category_code to X_test
+X_test$category_code <- as.factor(testingdata$category_code)
+
+# Add brand to X_test
+X_test$brand <- as.factor(testingdata$brand)
+RFpredictions <- predict(RFmodel, newdata = X_test)
+
+# Evaluate the RFE
+RFMSE <- mean((y_test - RFpredictions)^2)
+RFR2 <- 1 - (sum((y_test - RFpredictions)^2) / sum((y_test - mean(y_test))^2))
+
+cat(paste("Random Forest Mean Squared Error: ", RFMSE, "\n"))
+cat(paste("Random Forest R-squared: ", RFR2, "\n"))
+plot(y_test, RFpredictions, 
+     main = "Random Forest: Actual vs. Predicted Values",
+     xlab = "Actual Prices",
+     ylab = "Predicted Prices",
+     col = "green",  # Color of points
+     pch = 16        # Point type
+)
+abline(a = 0, b = 1, col = "red", lty = 2)
+legend("topleft", legend = c("Actual vs. Predicted", "Perfect Prediction"),
+       col = c("green", "red"), pch = c(16, NA), lty = c(NA, 2))
+```
+
+#---------------------------------------------------------------------------------------------------------------------
+#PCA
+#---------------------------------------------------------------------------------------------------------------------
+
+```{r}
+trainingdata$price <- as.numeric(trainingdata$price)
+features <- c('product_id', 'day', 'month', 'hour', 'minute', 'event_type_numeric')
+
+# One-hot encode categorical variables
+encodedtrain <- cbind(trainingdata[, features, drop = FALSE], model.matrix(~ category_code + brand + event_type_numeric - 1, data = trainingdata))
+X <- cbind(encodedtrain[, -ncol(encodedtrain)], trainingdata$price)
+
+# Perform PCA
+PCA_final <- PCA(X[, -ncol(X)], scale.unit = TRUE, graph = FALSE)
+
+# Choose the number of principal components to retain
+no_of_components <- 5
+PCA_X <- as.data.frame(PCA_final$ind$coord[, 1:no_of_components])
+colnames(PCA_X) <- paste0("PC", 1:no_of_components)
+data_PCA <- cbind(PCA_X, price = trainingdata$price)
+
+# Train a RFE on the PCA-transformed data
+RFE <- lm(price ~ ., data = data_PCA)
+PCA_pred <- predict(RFE, newdata = PCA_X)
+
+MSE_PCA <- mean((trainingdata$price - PCA_pred)^2)
+R2_PCA <- 1 - (sum((trainingdata$price - PCA_pred)^2) / sum((trainingdata$price - mean(trainingdata$price))^2))
+
+cat(paste("PCA Mean Squared Error: ", MSE_PCA, "\n"))
+cat(paste("PCA R-squared: ", R2_PCA, "\n"))
+
+plot(trainingdata$price, PCA_pred, 
+     main = "PCA: Actual vs. Predicted Values",
+     xlab = "Actual Prices",
+     ylab = "Predicted Prices",
+     col = "purple",
+     pch = 16  
+)
+abline(a = 0, b = 1, col = "red", lty = 2)
+legend("topleft", legend = c("Actual vs. Predicted", "Perfect Prediction"),
+       col = c("purple", "red"), pch = c(16, NA), lty = c(NA, 2))
+```
+
+#---------------------------------------------------------------------------------------------------------------------
+# Random Forrest CV and Hyperparameter Training
+#---------------------------------------------------------------------------------------------------------------------
+
+```{r}
+rm(df_j)
+rm(df)
+trainctrl <- trainControl(method = "cv",  # Cross-validation method
+                     number = 2,      # Number of folds
+                     verboseIter = TRUE,
+                     allowParallel = TRUE)
+
+# Define the parameter grid for tuning
+gridparameter <- expand.grid(mtry = c(2, 5, 8))
+
+# Train the random forest RFE using grid search
+RF_CV <- train(price ~ ., 
+                     data = trainingdata, 
+                     method = "rf", 
+                     trControl = trainctrl,
+                     tuneGrid = gridparameter)
+
+print(RF_CV)
+
+RF_CV_pred <- predict(RF_CV, newdata = X_test)
+RF_MSE_CV <- mean((y_test - RF_CV_pred)^2)
+RF_R2_CV <- 1 - (sum((y_test - RF_CV_pred)^2) / sum((y_test - mean(y_test))^2))
+
+cat(paste("Random Forest CV Mean Squared Error: ", RF_MSE_CV, "\n"))
+cat(paste("Random Forest CV R-squared: ", RF_R2_CV, "\n"))
+```
+
+#---------------------------------------------------------------------------------------------------------------------
+# PCA CV and Hyperparameter Training
+#---------------------------------------------------------------------------------------------------------------------
+
+```{r}
+numericvar <- sapply(trainingdata, is.numeric)
+
+train_data_filtered <- trainingdata[, numericvar & sapply(trainingdata, function(x) length(unique(x)) > 1)]
+
+PCA_grid_parameter <- expand.grid(
+  ncomp = c(5, 10)
+)
+
+PCA_CV <- train(
+  price ~ .,
+  data = train_data_filtered, 
+  method = "pcr",      # Principal Component Regression
+  trControl = trainctrl,
+  tuneGrid = PCA_grid_parameter,
+  preProcess = "pca",  # Specify PCA as the preprocessing method
+  verbose = FALSE
+)
+
+print(PCA_CV)
+
+PCA_CV_pred <- predict(PCA_CV, newdata = X_test)
+PCA_CV_MSE <- mean((y_test - PCA_CV_pred)^2)
+PCA_CV_r2 <- 1 - sum((y_test - PCA_CV_pred)^2) / sum((y_test - mean(y_test))^2)
+
+cat(paste("PCA CV Mean Squared Error: ", PCA_CV_MSE, "\n"))
+cat(paste("PCA CV R-squared: ", PCA_CV_r2, "\n"))
+```
+
+#---------------------------------------------------------------------------------------------------------------------
+# Model Comparison
+#---------------------------------------------------------------------------------------------------------------------
+
+```{r}
+model_comp <- data.frame(
+  Model = c("Random Forest", "PCA", "Random Forest CV", "PCA CV"),
+  MSE = numeric(4),
+  R2 = numeric(4)
+)
+
+model_comp[1, c("MSE", "R2")] <- c(RFMSE, RFR2)
+model_comp[2, c("MSE", "R2")] <- c(MSE_PCA, R2_PCA)
+model_comp[3, c("MSE", "R2")] <- c(RF_MSE_CV, RF_R2_CV)
+model_comp[4, c("MSE", "R2")] <- c(PCA_CV_MSE, PCA_CV_r2)
+
+print(model_comp)
+```
